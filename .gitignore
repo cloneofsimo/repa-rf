@@ -1,0 +1,9 @@
+dataset
+__pycache__
+data*
+preprocess
+test_data
+wandb
+checkpoints
+plots
+*.pth
