@@ -152,6 +152,7 @@ def forward(
 @click.option(
     "--model_head_dim", type=int, default=128, help="Head dimension of the model"
 )
+@click.option("--compile_models", type=bool, default=False, help="Compile models")
 def train_ddp(
     dataset_url,
     test_dataset_url,
@@ -166,6 +167,7 @@ def train_ddp(
     model_width,
     model_depth,
     model_head_dim,
+    compile_models,
 ):
     # Initialize distributed training
     assert torch.cuda.is_available(), "CUDA is required for training"
@@ -185,7 +187,7 @@ def train_ddp(
 
     # Initialize wandb for the master process
 
-    vae_model, tokenizer, text_encoder = load_encoders(device=device)
+    vae_model, tokenizer, text_encoder = load_encoders(device=device, compile_models=compile_models)
 
     dit_model = DiT(
         in_channels=16,
@@ -220,7 +222,9 @@ def train_ddp(
 
     # Wrap model in DDP
     dit_model = DDP(dit_model, device_ids=[ddp_rank])
-    dit_model.forward = torch.compile(dit_model.forward, mode="reduce-overhead")
+    
+    if compile_models:
+        dit_model.forward = torch.compile(dit_model.forward, mode="reduce-overhead")
 
     # Initialize optimizer and scheduler
     param_setup = []

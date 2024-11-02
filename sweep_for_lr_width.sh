@@ -25,7 +25,8 @@ for loglr in "${log_lrs[@]}"; do
                 --alignment_layer 8 \
                 --repa_lambda $repa_lambda \
                 --model_depth 9 \
-                --model_head_dim 32
+                --model_head_dim 32 \
+                --compile_models True 
         done
     done
 done
