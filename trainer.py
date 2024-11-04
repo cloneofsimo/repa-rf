@@ -21,8 +21,12 @@ torch.backends.cudnn.allow_tf32 = True
 
 import wandb
 from model import DiT, REPALoss
-from utils import (avg_scalar_across_ranks, create_dataloader,
-                   encode_prompt_with_t5, load_encoders)
+from utils import (
+    avg_scalar_across_ranks,
+    create_dataloader,
+    encode_prompt_with_t5,
+    load_encoders,
+)
 
 CAPTURE_INPUT = False
 
@@ -45,9 +49,18 @@ def forward(
     ctx,
     generator=None,
     binnings=None,
+    batch_multiplicity=None,
 ):
 
     (images_vae, images_dinov2, captions) = batch
+
+    if batch_multiplicity is not None:
+        # cut the batch by factor of batch_multiplicity
+        len_subbatch = len(images_vae) // batch_multiplicity
+        images_vae = images_vae[:len_subbatch]
+        captions = captions[:len_subbatch]
+        images_dinov2 = images_dinov2[:len_subbatch]
+
     images_vae = images_vae.to(device).to(torch.float32)
     images_dinov2 = images_dinov2.to(device).to(torch.float32)
 
@@ -63,7 +76,13 @@ def forward(
         )
         caption_encoded = caption_encoded.to(torch.bfloat16)
 
-    batch_size = images_vae.size(0)
+    if batch_multiplicity is not None:
+        # repeat the batch by factor of batch_multiplicity
+        vae_latent = vae_latent.repeat(batch_multiplicity, 1, 1, 1)
+        caption_encoded = caption_encoded.repeat(batch_multiplicity, 1, 1)
+        images_dinov2 = images_dinov2.repeat(batch_multiplicity, 1, 1, 1)
+
+    batch_size = vae_latent.size(0)
 
     # log normal sample
     z = torch.randn(
@@ -82,9 +101,8 @@ def forward(
 
     with ctx:
         # Forward pass
-        z_t = vae_latent * t.reshape(batch_size, 1, 1, 1) + noise * (
-            1 - t.reshape(batch_size, 1, 1, 1)
-        )
+        tr = t.reshape(batch_size, 1, 1, 1)
+        z_t = vae_latent * (1 - tr) + noise * tr
         v_objective = vae_latent - noise
         output, intermediate_features = dit_model(z_t, caption_encoded, t)
 
@@ -187,7 +205,9 @@ def train_ddp(
 
     # Initialize wandb for the master process
 
-    vae_model, tokenizer, text_encoder = load_encoders(device=device, compile_models=compile_models)
+    vae_model, tokenizer, text_encoder = load_encoders(
+        device=device, compile_models=False
+    )
 
     dit_model = DiT(
         in_channels=16,
@@ -222,7 +242,7 @@ def train_ddp(
 
     # Wrap model in DDP
     dit_model = DDP(dit_model, device_ids=[ddp_rank])
-    
+
     if compile_models:
         dit_model.forward = torch.compile(dit_model.forward, mode="reduce-overhead")
 
@@ -307,6 +327,7 @@ def train_ddp(
                     representation_loss_binning,
                     representation_loss_binning_count,
                 ),
+                batch_multiplicity=4,
             )
             # Optimization step
             optimizer.zero_grad()

@@ -23,7 +23,8 @@ def create_dataloader(url, batch_size, num_workers, do_shuffle=True, just_resize
         [
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
-            transforms.Resize((256, 256)),
+            transforms.Resize((256)),
+            transforms.CenterCrop((256, 256)),
         ]
     )
 
@@ -31,7 +32,8 @@ def create_dataloader(url, batch_size, num_workers, do_shuffle=True, just_resize
         [
             transforms.ToTensor(),
             transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
-            transforms.Resize((224, 224)),
+            transforms.Resize((224)),
+            transforms.CenterCrop((224, 224)),
         ]
     )
 
@@ -42,7 +44,7 @@ def create_dataloader(url, batch_size, num_workers, do_shuffle=True, just_resize
         return image_vae, image_dinov2, json_data["caption"]
 
     dataset = (
-        dataset.decode("rgb")
+        dataset.decode("rgb", handler=wds.warn_and_continue)
         .to_tuple("jpg;png", "json", handler=wds.warn_and_continue)
         .map(transform_data)
     )
@@ -194,5 +196,26 @@ def test_pipe(
         break
 
 
+from tqdm import tqdm
+
+
+def test_dataloader(
+    dataset_path="/home/ubuntu/pd12m.int8/dataset/cc12m-wds/cc12m-train-{0000..2151}.tar",
+):
+    dataloader = create_dataloader(
+        dataset_path, batch_size=64, num_workers=64, do_shuffle=False, just_resize=True
+    )
+    pbar = tqdm(dataloader)
+    for batch in pbar:
+        images_vae, images_dinov2, captions = batch
+        # print(images_vae.shape, images_dinov2.shape, captions)
+        pbar.set_postfix(
+            images_vae=images_vae.shape,
+            images_dinov2=images_dinov2.shape,
+            captions=len(captions),
+        )
+
+
 if __name__ == "__main__":
-    test_pipe()
+    # test_pipe()
+    test_dataloader()

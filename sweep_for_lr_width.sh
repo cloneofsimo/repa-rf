@@ -1,16 +1,16 @@
 
 
-log_lrs=(-10 -8 -6 -4 -2)
-width=(128 512 2048)
+log_lrs=(-8 -6 -4 -2)
+width=(512 1024 2048)
 repalambda=(0.0 1.0)
 export TOKENIZERS_PARALLELISM=false
 
-for loglr in "${log_lrs[@]}"; do
-    for w in "${width[@]}"; do
+for w in "${width[@]}"; do
+    for loglr in "${log_lrs[@]}"; do
         for repa_lambda in "${repalambda[@]}"; do
             lr=$(python -c "print(2**$loglr)")
             echo "Running with lr=$lr and width=$w"
-            name="lr${lr}_width${w}_repalambda${repa_lambda}"
+            name="lr${lr}_width${w}_lambda${repa_lambda}_v2"
 
             torchrun --nproc_per_node=8 trainer.py \
                 --run_name $name \
@@ -25,7 +25,7 @@ for loglr in "${log_lrs[@]}"; do
                 --alignment_layer 8 \
                 --repa_lambda $repa_lambda \
                 --model_depth 9 \
-                --model_head_dim 32 \
+                --model_head_dim 64 \
                 --compile_models True 
         done
     done
